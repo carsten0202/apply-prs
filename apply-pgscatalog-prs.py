@@ -1,3 +1,4 @@
+# TODO: make support of ORs
 import argparse
 import time
 import os
@@ -6,6 +7,7 @@ import subprocess
 import pandas as pd
 import yaml
 
+from rich.align import Align
 from rich.console import Console
 from rich.layout import Layout
 from rich.live import Live
@@ -19,18 +21,6 @@ parser.add_argument("-g", "--genetic", default=None, type=str,
                          "(for example, for the file '/emc/data/File.bed' this would be '/emc/data/File')")
 parser.add_argument("-p", "--prs-wm", default=None, type=str,
                     help="Absolute path to PRS weight matrix downloaded from PGSCatalog")
-# parser.add_argument("--rsid-col", default=None, type=str,
-#                     help="Column name, where rsID is stored in PRS weight matrix")
-# parser.add_argument("--chrom-col", default=None, type=str,
-#                     help="Column name, where chromosome is stored in PRS weight matrix")
-# parser.add_argument("--pos-col", default=None, type=str,
-#                     help="Column name, where position within chromosome is stored in PRS weight matrix")
-# parser.add_argument("--effect-allele-col", default=None, type=str,
-#                     help="Column name, where effect allele is stored in PRS weight matrix")
-# parser.add_argument("--ref-allele-col", default=None, type=str,
-#                     help="Column name, where reference allele is stored in PRS weight matrix")
-# parser.add_argument("--beta-col", default=None, type=str,
-#                     help="Column name, where effect size (beta, log(OR)) is stored in PRS weight matrix")
 parser.add_argument("-o", "--out", default=None, type=str,
                     help="Output path prefix "
                          "(for example, to generate the files '/home/abc123/prs/output.profile' "
@@ -62,55 +52,66 @@ def check_input(args):
         print("Output prefix is required")
         parser.print_help()
         exit(3)
-    # if (args.rsid_col is None) and ((args.chrom_col is None) or (args.pos_col is None)):
-    #     print("Either rsID column or chromosome and position columns should be provided")
-    #     parser.print_help()
-    #     exit(6)
-    # if args.effect_allele_col is None:
-    #     print("Effect allele column should be provided")
-    #     parser.print_help()
-    #     exit(6)
-    # if args.beta_col is None:
-    #     print("Effect size (beta, log(OR)) column should be provided")
-    #     parser.print_help()
-    #     exit(6)
 
 
-def print_error_misaligned_files():
-    print("ERROR: Less that a half of the PGSCatalog SNPs are available.")
-    print("ERROR: This may be for one of the following reasons:")
-    print("ERROR: 1. Either you are using un-imputed plink data. THEN you have to impute the data.")
-    print("ERROR: *2. Or you have data imputed to a very specific panel that does not contain a lot of common variants "
-          "(happens seldom, probably won't happen to you). THEN you have to impute the data to a more general panel.")
-    print("ERROR: 3. Or the PRS weight matrix is using a different reference genome than your plink data. "
-          "THEN you need to liftover your data to the correct reference genome.")
-    print("ERROR: *4. Or the PRS was done using a very specific chip and contains such unique SNPs "
-          "that no imputation panel has them (happens seldom, probably won't happen to you). "
-          "THEN you have to find an imputation panel that has these SNPs and impute the data to this panel.")
-    print("Here is your troubleshoot guide:")
-    print("---")
-    print("Q: How do I figure out if the data are imputed or not, and to which panel? (problems 1,2)")
-    print("A: Ask your data provider (typically the phenomics platform) about it. "
-          "Imputed data will contain at least a few millions SNPs.")
-    print("---")
-    print("Q: How do I figure out if the reference genomes are different between the data? (problem 3)")
-    print("A: Ask your data provider (typically the phenomics platform) which reference genome was used for your data. "
-          "Check the reference genome of your score in the 'PGS Catalog Metadata' Excel sheet "
-          "at the http://www.pgscatalog.org/downloads/ . See, if they match or not.")
-    print("---")
-    print("Q: I have no idea about reference genomes and imputation, what do I do?")
-    print("A: We did our best we could do automatically processing the PGSCatalog data. "
-          "But if want to run the analysis, it is ultimately your responsibility to assure that you have proper data. "
-          "You don't want to publish the results that are fake because you mishandled the data, do you? ")
-    print("Ideally, your data provider (typically the phenomics platform) would *always* supply data to you "
-          "in the same reference genome, imputed to the same imputation panel. If this was the case, this script would "
-          "have been smarter at handling these issues automatically. But at the moment when this script was written "
-          "this was not the case =/ Unfortunately, this means it is your problem now to figure it all out "
-          "or to force your data provider to work properly ¯\_(ツ)_/¯")
-    print("---")
-    print("Q: I still have no idea, but I need this PRS, what do I do?")
-    print("A: Invite a bioinformatician with programming / data science background, explain your problem to them, "
-          "and show this error message.")
+def print_error_files():
+    is_to_print_the_guide = Confirm.ask("Would you like to see a troubleshoot guide?", default="n")
+    if is_to_print_the_guide:
+        print("ERROR: 1A. Either the plink data don't use the conventional up-to-date rsID.")
+        print("ERROR: 1B. Or the PGSCatalog data don't use the conventional up-to-date rsID.")
+        print("ERROR: 2A. Or you are using un-imputed plink data. THEN you have to impute the data.")
+        print("ERROR: *2B. Or you have data imputed to a very specific panel that does not contain a lot of common variants"
+              " (happens seldom, probably won't happen to you). THEN you have to impute the data to a more general panel.")
+        print("ERROR: 3. Or, if you are using chromosome:position fallback, the PRS weight matrix might be using "
+              "a different reference genome than your plink data. "
+              "THEN you need to liftover your data to the correct reference genome.")
+        print("ERROR: 4. Or the PRS was done using a very specific chip and contains such unique SNPs "
+              "that no imputation panel has them (happens seldom, probably won't happen to you). "
+              "THEN you have to find an imputation panel that has these SNPs and impute the data to this panel.")
+        print("Here is your troubleshoot guide:")
+        print("---")
+        print("1A")
+        print("Q: How do I figure out if plink data are using proper rsID? (problem 1A)")
+        print("A: Ask your data provider (typically the phenomics platform) about it. "
+              "Or, look at the files - you might notice non-'rsNNNNNN' formatted ids (a few dots are ok).")
+        print("Q: What can I do about plink data rsID annotations?")
+        print("A: Ask your data provider (typically the phenomics platform) to annotate the rsID in your data.")
+        print("---")
+        print("1B")
+        print("Q: How do I figure out if PGSCatalog data are using proper rsID? (problem 1B)")
+        print("A: Look at the files - you might notice non-'rsNNNNNN' formatted ids (a few dots are ok).")
+        print("Q: What can I do about PGSCatalog data rsID annotations?")
+        print("A: Try using a fallback 'chromosome:position' method of matching. "
+              "Remember, you will need to replace the ID in plink 'bim' file.")  # TODO: make it an option in the code
+        print("---")
+        print("2A, *2B")
+        print("Q: How do I figure out if the data are imputed or not, and to which panel? (problems 2A, *2B)")
+        print("A: Ask your data provider (typically the phenomics platform) about it. "
+              "Imputed data will typically contain at least a few millions SNPs.")
+        print("---")
+        print("3")
+        print("Q: How do I figure out if the reference genomes are different between the data? (problem 3)")
+        print("A: Ask your data provider (typically the phenomics platform) which reference genome was used for your data. "
+              "Check the reference genome of your score in the 'PGS Catalog Metadata' Excel sheet "
+              "at the http://www.pgscatalog.org/downloads/ . See, if they match or not.")
+        print("---")
+        print("4")
+        print("Q: How do I now if problem 4 is the case?")
+        print("A: Unless you have a clear proof, it is almost definitely not.")
+        print("---")
+        print("General questions")
+        print("Q: I have no idea about reference genomes and imputation, what do I do?")
+        print("A: We did our best we could do automatically processing the PGSCatalog data. "
+              "But if want to run the analysis, it is ultimately your responsibility to assure that you have proper data. "
+              "You don't want to publish the results that are fake because you mishandled the data, do you? ")
+        print("Ideally, your data provider (typically the phenomics platform) would *always* supply data to you "
+              "in the same reference genome, imputed to the same imputation panel. If this was the case, this script would "
+              "have been smarter at handling these issues automatically. But at the moment when this script was written "
+              "this was not the case =/ Unfortunately, this means it is your problem now to figure it all out "
+              "or to force your data provider to work properly ¯\_(ツ)_/¯")
+        print("Q: I still have no idea, but I need this PRS, what do I do?")
+        print("A: Invite a bioinformatician with programming / data science background, explain your problem to them, "
+              "and show this error message.")
 
 
 def print_non_annotated_plink_file_error():
@@ -134,10 +135,6 @@ def print_non_annotated_plink_file_error():
 #         df = df[df["reference_allele"].isin(nucleotides)]
 #     printout(f"  {df.shape[0]} SNPs were preserved, {lines_were - df.shape[0]} indels were filtered")
 #
-#     # Check if plink files have any annotation at all
-#     if (plink_variants_df["rsid"].nunique() == 1) and (plink_variants_df["rsid"].unique()[0] == "."):
-#         print_non_annotated_plink_file_error()
-#         exit(30)
 #     # Chromosome names cutting - changes dataframes inplace
 #     chrom_cutter = lambda x: x[3:] if x.startswith("chr") else x
 #     pgscatalog_df["chr_name"] = pgscatalog_df["chr_name"].astype(str).apply(chrom_cutter)
@@ -268,11 +265,12 @@ def load_data(plink_prefix: str, prs_wm_text_file: str):
     # Annotate PGSCatalog data
     columns = annotate_pgscatalog_file(pgscatalog_df)
     pgscatalog_df.rename(columns, inplace=True)
-    layout["top"]["leftfile"].update(render_file_table(pgscatalog_df, title="PRS WM file"))
+    layout["top"]["leftfile"].update(render_file_table(pgscatalog_df, title="plink data"))
     console.print(layout)
 
     # Load plink data
     printout("Loading plink data...")
+    # TODO: load async while waiting for the input above
     plink_variants_df = pd.read_table(
         plink_prefix+".bim",
         sep="\t", header=None,
@@ -313,8 +311,38 @@ def preprocess_data(pgscatalog_df, plink_variants_df, processed_wm_text_file):
         processed_wm_text_file, sep="\t", float_format="%.4e", index=False,
     )
     if not was_match_successful:
-        print_error_misaligned_files()
+        print("ERROR: Less that a half of the PGSCatalog SNPs are available.")
+        print("ERROR: This may be for one of the following reasons:")
+        print_error_files()
         exit(40)
+
+
+def final_check(pgscatalog_df, plink_variants_df):
+    layout["top"]["leftfile"].update(
+        Align(
+            render_file_table(pgscatalog_df[["pos_key"]], title="PRS WM file key"),
+            align="center",
+        )
+    )
+    layout["top"]["rightfile"].update(
+        Align(
+            render_file_table(plink_variants_df[["rsid"]], title="plink data key"),
+            align="center",
+        )
+    )
+    console.print(layout)
+    printout("-----------------\nPlease review the keys the data will be matched on")
+    is_to_run = Confirm.ask("Do you confirm you want to match the files on these keys?")
+    if is_to_run:
+        layout["top"]["leftfile"].update(render_file_table(pgscatalog_df, title="PRS WM file"))
+        layout["top"]["rightfile"].update(render_file_table(plink_variants_df, title="plink data"))
+        console.print(layout)
+        printout("-----------------")
+    else:
+        print("You have decided to halt the execution due to the mismatch between the IDs in two files.")
+        print("Please, review this troubleshooting guide, if you need an inspiration about how fixing this:")
+        print_error_files()
+        exit(50)
 
 
 def plink_qc(df: pd.DataFrame):
@@ -356,22 +384,6 @@ def calculate_prs(plink_prefix: str, processed_wm_text_file: str, output_prefix:
     df[["SCORESUM"]].to_csv(prs_output_file, sep="\t", float_format="%.4e")
     # Done
     printout(f"PRS is saved to {prs_output_file}")
-
-
-def parse_pgscatalog_wm_columns(args):
-    columns = {
-        args.effect_allele_col: "effect_allele",
-        args.beta_col: "effect_weight",
-    }
-    if args.ref_allele_col is not None:
-        columns[args.ref_allele_col] = "reference_allele"
-    if args.rsid_col is not None:
-        columns[args.rsid_col] = "rsID"
-    if args.chrom_col is not None:
-        columns[args.chrom_col] = "chr_name"
-    if args.pos_col is not None:
-        columns[args.pos_col] = "chr_position"
-    return columns
 
 
 def printout(text):
@@ -418,6 +430,7 @@ def main(args):
     #         "PGS files were preprocessed - would you like to re-use them (recommended) instead of processing again?",
     #     )
     preprocess_data(pgscatalog_df, plink_variants_df, processed_wm_text_file)
+    final_check(pgscatalog_df, plink_variants_df)
     calculate_prs(plink_prefix, processed_wm_text_file, output_prefix)
 
 
