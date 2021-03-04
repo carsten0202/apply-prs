@@ -298,10 +298,10 @@ def preprocess_data(pgscatalog_df, plink_variants_df, processed_wm_text_file):
         choices=[RSID, CHROMPOS],
     )
     if how_to_match == RSID:
-        printout("Trying to match PGSCatalog data with plink data using rsID...")
+        printout("Attempting to match PGSCatalog data with plink data using rsID...")
         prep_keys_rsid(pgscatalog_df, plink_variants_df)
     elif how_to_match == CHROMPOS:
-        printout("Trying to match PGSCatalog data with plink data using chromosome and position...")
+        printout("Attempting to match PGSCatalog data with plink data using chromosome and position...")
         prep_keys_chrompos(pgscatalog_df, plink_variants_df)
     else:
         raise RuntimeError("Unreacheble code")
@@ -309,7 +309,9 @@ def preprocess_data(pgscatalog_df, plink_variants_df, processed_wm_text_file):
     # QC
     # input_files_qc(pgscatalog_df, plink_variants_df)
     # Assess the results and create final matching that plink will be able to use
-    pgscatalog_df[["pos_key", "effect_allele", "effect_weight"]].to_csv(processed_wm_text_file, sep="\t", float_format="%.4e")
+    pgscatalog_df[["pos_key", "effect_allele", "effect_weight"]].to_csv(
+        processed_wm_text_file, sep="\t", float_format="%.4e", index=False,
+    )
     if not was_match_successful:
         print_error_misaligned_files()
         exit(40)
