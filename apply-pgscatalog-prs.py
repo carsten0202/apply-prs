@@ -35,6 +35,10 @@ layout = Layout()
 live = Live(console=console)
 
 
+PLINK_KEY_COLUMN = "rsid"
+PGSCATALOG_KEY_COLUMN = "pos_key"
+
+
 def check_input(args):
     if args.genetic is None:
         print("plink genetic data are required")
@@ -159,7 +163,7 @@ plink_variants_df: A dataframe of local plink variants data with columns:
 
 def prep_keys_rsid(pgscatalog_df: pd.DataFrame, plink_variants_df: pd.DataFrame):
     # QC the plink rsid
-    if (plink_variants_df["rsid"].nunique() == 1) and (plink_variants_df["rsid"].unique()[0] == "."):
+    if (plink_variants_df[PLINK_KEY_COLUMN].nunique() == 1) and (plink_variants_df[PLINK_KEY_COLUMN].unique()[0] == "."):
         print_non_annotated_plink_file_error()
         exit(30)
     # Figuring out the key
@@ -168,7 +172,7 @@ def prep_keys_rsid(pgscatalog_df: pd.DataFrame, plink_variants_df: pd.DataFrame)
         choices=list(pgscatalog_df.columns),
     )
     # Creating keys
-    pgscatalog_df["pos_key"] = pgscatalog_df[rsid_column].astype(str)
+    pgscatalog_df[PGSCATALOG_KEY_COLUMN] = pgscatalog_df[rsid_column].astype(str)
     console.print(layout)
 
 
@@ -183,13 +187,13 @@ def prep_keys_chrompos(pgscatalog_df: pd.DataFrame, plink_variants_df: pd.DataFr
         choices=list(pgscatalog_df.columns),
     )
     # Creating keys
-    pgscatalog_df["pos_key"] = pgscatalog_df[chrom_column].astype(str) + ":" + pgscatalog_df[pos_column].astype(str)
+    pgscatalog_df[PGSCATALOG_KEY_COLUMN] = pgscatalog_df[chrom_column].astype(str) + ":" + pgscatalog_df[pos_column].astype(str)
     console.print(layout)
 
 
 def check_the_files_match(pgscatalog_df, plink_variants_df):
     # Heuristics of mapping
-    amount_of_shared_keys = len(set(plink_variants_df["rsid"]).intersection(pgscatalog_df["pos_key"]))
+    amount_of_shared_keys = len(set(plink_variants_df[PLINK_KEY_COLUMN]).intersection(pgscatalog_df[PGSCATALOG_KEY_COLUMN]))
     amount_of_plink_variants = plink_variants_df.shape[0]
     amount_of_pgscatalog_variants = pgscatalog_df.shape[0]
     if amount_of_shared_keys > 0.50 * amount_of_pgscatalog_variants:
@@ -279,7 +283,7 @@ def load_data(plink_prefix: str, prs_wm_text_file: str):
         sep="\t", header=None,
         # fixed structure of plink .bim files - https://www.cog-genomics.org/plink/1.9/formats#bim
         names=["chr_name", "rsid", "dummy_cm_position", "chr_position", "base_allele", "alternative_allele"],
-        usecols=["chr_name", "rsid", "chr_position", "base_allele", "alternative_allele"],
+        usecols=["chr_name", PLINK_KEY_COLUMN, "chr_position", "base_allele", "alternative_allele"],
     )
     layout["top"]["rightfile"].update(render_file_table(plink_variants_df, title="plink data"))
     console.print(layout)
@@ -310,7 +314,7 @@ def preprocess_data(pgscatalog_df, plink_variants_df, processed_wm_text_file):
     # QC
     # input_files_qc(pgscatalog_df, plink_variants_df)
     # Assess the results and create final matching that plink will be able to use
-    pgscatalog_df[["pos_key", "effect_allele", "effect_weight"]].to_csv(
+    pgscatalog_df[[PGSCATALOG_KEY_COLUMN, "effect_allele", "effect_weight"]].to_csv(
         processed_wm_text_file, sep="\t", float_format="%.4e", index=False,
     )
     if not was_match_successful:
@@ -321,15 +325,17 @@ def preprocess_data(pgscatalog_df, plink_variants_df, processed_wm_text_file):
 
 
 def final_check(pgscatalog_df, plink_variants_df):
+    overlaps = pgscatalog_df[PGSCATALOG_KEY_COLUMN].isin(plink_variants_df[PLINK_KEY_COLUMN])
+    sample = pgscatalog_df.loc[overlaps, [PGSCATALOG_KEY_COLUMN]].head(10)
     layout["top"]["leftfile"].update(
         Align(
-            render_file_table(pgscatalog_df[["pos_key"]], title="PRS WM file key"),
+            render_file_table(sample, title="PRS WM file key"),
             align="center",
         )
     )
     layout["top"]["rightfile"].update(
         Align(
-            render_file_table(plink_variants_df[["rsid"]], title="plink data key"),
+            render_file_table(sample, title="plink data key"),
             align="center",
         )
     )
