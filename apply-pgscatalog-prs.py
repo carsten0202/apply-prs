@@ -1,3 +1,6 @@
+# TODO: manual test:
+# /home/mvn373/fast/tools/python36/bin/python3 -u /home/mvn373/fast/prs-workshop/apply-pgscatalog-prs.py --genetic /home/mvn373/fast/prs-repo/pre-calculated/genetic/TARGET_final --prs-wm /home/mvn373/fast/prs-repo/pre-calculated/WMs/olink/PGS000217.txt --out /home/mvn373/fast/prs-repo/pre-calculated/scores/tool/dev-test
+# diff /home/mvn373/fast/prs-repo/pre-calculated/scores/tool/olink000217-TARGETold.prs /home/mvn373/fast/prs-repo/pre-calculated/scores/tool/dev-test.prs
 # TODO: make support of ORs
 import argparse
 import time
