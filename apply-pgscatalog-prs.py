@@ -272,7 +272,7 @@ def load_data(plink_prefix: str, prs_wm_text_file: str):
     # Annotate PGSCatalog data
     columns = annotate_pgscatalog_file(pgscatalog_df)
     pgscatalog_df.rename(columns, inplace=True)
-    layout["top"]["leftfile"].update(render_file_table(pgscatalog_df, title="plink data"))
+    layout["top"]["leftfile"].update(render_file_table(pgscatalog_df, title="PRS WM file"))
     console.print(layout)
 
     # Load plink data
