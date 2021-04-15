@@ -390,7 +390,10 @@ def calculate_prs(plink_prefix: str, processed_wm_text_file: str, output_prefix:
     printout("Parsing plink results...")
     df = pd.read_table(plink_output_file, sep="\s+", index_col="IID")
     df: pd.DataFrame = plink_qc(df)
-    df[["SCORESUM"]].to_csv(prs_output_file, sep="\t", float_format="%.4e")
+    scorename = os.path.basename(processed_wm_text_file).split(".")[0]
+    output_column = f"SCORESUM_{scorename}"
+    df.rename(columns={"SCORESUM": output_column}, inplace=True)
+    df[[output_column]].to_csv(prs_output_file, sep="\t", float_format="%.4e")
     # Done
     printout(f"PRS is saved to {prs_output_file}")
 
