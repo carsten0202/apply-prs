@@ -7,6 +7,8 @@ import time
 import os
 import shutil
 import subprocess
+from typing import Union
+
 import pandas as pd
 import yaml
 
@@ -28,11 +30,14 @@ parser.add_argument("-o", "--out", default=None, type=str,
                     help="Output path prefix "
                          "(for example, to generate the files '/home/abc123/prs/output.profile' "
                          "this would be '/home/abc123/prs/output')")
+parser.add_argument("-c", "--config", default=None, type=str,
+                    help="Path to yaml config")
 arguments = parser.parse_args()
 
 console = Console()
 layout = Layout()
 live = Live(console=console)
+CONFIG: Union[None, dict] = None
 
 
 PLINK_KEY_COLUMN = "rsid"
@@ -61,8 +66,33 @@ def check_input(args):
         exit(3)
 
 
+def maybe_load_config(config_file: Union[str, None]):
+    global CONFIG
+
+    if config_file is None:
+        return
+    with open(config_file, "r") as yamlfile:
+        CONFIG = yaml.load(yamlfile, Loader=yaml.FullLoader)
+        printout(f"===============================")
+        printout(f"CONFIG WAS PROVIDED AT {config_file}")
+        printout(f"RUNNING IN AUTOMATED MODE")
+        printout(f"===============================")
+
+
+def ask(text: str, _tool, _config: str, **kwargs):
+    if CONFIG is None:
+        # Manual mode, ask user
+        return _tool.ask(text, **kwargs)
+    else:
+        # Automated mode
+        if _config not in CONFIG:
+            raise RuntimeError(f"An answer to the question {text} should have been provided in the config as {_config}, "
+                               f"but there was no value for this parameter")
+        return CONFIG[_config]
+
+
 def print_error_files():
-    is_to_print_the_guide = Confirm.ask("Would you like to see a troubleshoot guide?", default="n")
+    is_to_print_the_guide = ask("Would you like to see a troubleshoot guide?", default="n", _tool=Confirm)
     if is_to_print_the_guide:
         print("ERROR: 1A. Either the plink data don't use the conventional up-to-date rsID.")
         print("ERROR: 1B. Or the PGSCatalog data don't use the conventional up-to-date rsID.")
@@ -167,9 +197,11 @@ def prep_keys_rsid(pgscatalog_df: pd.DataFrame, plink_variants_df: pd.DataFrame)
         print_non_annotated_plink_file_error()
         exit(30)
     # Figuring out the key
-    rsid_column = Prompt.ask(
+    rsid_column = ask(
         "Which column in PRS file contains the [bold red]rsID[/bold red]?",
         choices=list(pgscatalog_df.columns),
+        _config="rsID column",
+        _tool=Prompt,
     )
     # Creating keys
     pgscatalog_df[PGSCATALOG_KEY_COLUMN] = pgscatalog_df[rsid_column].astype(str)
@@ -178,13 +210,17 @@ def prep_keys_rsid(pgscatalog_df: pd.DataFrame, plink_variants_df: pd.DataFrame)
 
 def prep_keys_chrompos(pgscatalog_df: pd.DataFrame, plink_variants_df: pd.DataFrame):
     # Figuring out the key
-    chrom_column = Prompt.ask(
+    chrom_column = ask(
         "Which column in PRS file contains the [bold red]chromosome[/bold red]?",
         choices=list(pgscatalog_df.columns),
+        _config="chromosome column",
+        _tool=Prompt,
     )
-    pos_column = Prompt.ask(
+    pos_column = ask(
         "Which column in PRS file contains the [bold red]position[/bold red]?",
         choices=list(pgscatalog_df.columns),
+        _config="position column",
+        _tool=Prompt,
     )
     # Creating keys
     pgscatalog_df[PGSCATALOG_KEY_COLUMN] = pgscatalog_df[chrom_column].astype(str) + ":" + pgscatalog_df[pos_column].astype(str)
@@ -231,15 +267,19 @@ def load_prs_wm(prs_wm_text_file: str):
 
 def annotate_pgscatalog_file(pgscatalog_df):
     # Annotate the essential beta and effect allele columns:
-    beta_column = Prompt.ask(
+    beta_column = ask(
         "Which column in PRS file contains the [bold red]beta[/bold red]?",
         choices=list(pgscatalog_df.columns),
+        _config="beta column",
+        _tool=Prompt,
     )
     console.print(layout)
 
-    effect_allele_column = Prompt.ask(
+    effect_allele_column = ask(
         "Which column in PRS file contains the [bold red]effect allele[/bold red]?",
         choices=list(pgscatalog_df.columns),
+        _config="effect allele column",
+        _tool=Prompt,
     )
     console.print(layout)
 
@@ -297,10 +337,12 @@ def preprocess_data(pgscatalog_df, plink_variants_df, processed_wm_text_file):
     # First, ask how to match
     RSID = "rsid"
     CHROMPOS = "pos"
-    how_to_match = Prompt.ask(
+    how_to_match = ask(
         "Would you prefer matching plink data on existing identifiers (rsid) "
         "or create a novel key from chromosome:position pair (pos)?",
         choices=[RSID, CHROMPOS],
+        _config="matching on",
+        _tool=Prompt,
     )
     if how_to_match == RSID:
         printout("Attempting to match PGSCatalog data with plink data using rsID...")
@@ -341,7 +383,11 @@ def final_check(pgscatalog_df, plink_variants_df):
     )
     console.print(layout)
     printout("-----------------\nPlease review the keys the data will be matched on")
-    is_to_run = Confirm.ask("Do you confirm you want to match the files on these keys?")
+    if CONFIG is not None:
+        is_to_run = True  # auto mode
+    else:
+        # this is intentionally not done using "ask()" due to a different logic
+        is_to_run = Confirm.ask("Do you confirm you want to match the files on these keys?")  # manual mode
     if is_to_run:
         layout["top"]["leftfile"].update(render_file_table(pgscatalog_df, title="PRS WM file"))
         layout["top"]["rightfile"].update(render_file_table(plink_variants_df, title="plink data"))
@@ -434,6 +480,7 @@ def main(args):
     check_input(args)
     plink_prefix, prs_wm_text_file, output_prefix = args.genetic, args.prs_wm, args.out
     render()
+    maybe_load_config(args.config)
     pgscatalog_df, plink_variants_df, processed_wm_text_file = load_data(plink_prefix, prs_wm_text_file)
     # TODO: reuse
     # is_to_reuse = False

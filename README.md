@@ -58,11 +58,41 @@ You need to supply three arguments:
 * *--out* - prefix for the output. For example, if you want an output file "/outfolder/out.prs" it would be "--out /outfolder/out".
 
 ### Running
+#### Standard mode
 Once you start, it will prompt you at the bottom of the screen to provide the information. You will need to:
 supply the names of the columns for beta and effect allele in the PGSCatalog data
 choose if your plink data are using rsid or chrom:pos as identifiers (more options and better alignment will be done in the future)
 supply the names of the columns for rsid OR chromosome+position in the PGSCatalog data
 make the final confirmation
+
+#### Automated mode
+Experienced users might want to run the tool from their code.  
+To make it possible the tool also accepts *--config* argument, which must point to a [YAML](https://yaml.org/spec/1.2/spec.html#id2761803) file, defining the following scalar variables:
+```yaml
+# first, define beta and effect allele columns:
+beta column: NAME OF THE BETA COLUMN
+effect allele column: NAME OF THE EFFECT ALLELE COLUMN
+# next, choose how to match your files -
+# using rsid [rsid] or chromosome+position [pos]:
+matching on: rsid OR pos
+# finally, define relevant columns for the chosen matching approach
+# - for "rsid" define rsID column:
+rsID column: NAME OF THE RSID COLUMN
+# - for "pos" define chromosome and position columns:
+chromosome column: NAME OF THE CHROMOSOME COLUMN
+position column: NAME OF THE POSITION COLUMN
+```
+
+Other arguments (*--genetic, --prs-wm, and --out*) must still be supplied in the command line.  
+Be aware that tool won't check the correctness of the config and will just fail if a required argument is undefined.
+
+Example of a valid config for http://www.pgscatalog.org/score/PGS000255/:
+```yaml
+beta column: effect_weight
+effect allele column: effect_allele
+matching on: rsid
+rsID column: rsID
+```
 
 ### Conscious limitation
 If your plink data does not have at least 50% of the variants from the PGSCatalog file, the tool won't allow you to run the PRS calculation, as the resulting scores might be too unreliable.
