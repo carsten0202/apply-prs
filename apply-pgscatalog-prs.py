@@ -360,8 +360,8 @@ def preprocess_data(pgscatalog_df, plink_variants_df, processed_wm_text_file):
         processed_wm_text_file, sep="\t", float_format="%.4e", index=False,
     )
     if not was_match_successful:
-        print("ERROR: Less that a half of the PGSCatalog SNPs are available.")
-        print("ERROR: This may be for one of the following reasons:")
+        printout("ERROR: Less that a half of the PGSCatalog SNPs are available.")
+        printout("ERROR: This may be for one of the following reasons:")
         print_error_files()
         exit(40)
 
@@ -394,8 +394,8 @@ def final_check(pgscatalog_df, plink_variants_df):
         console.print(layout)
         printout("-----------------")
     else:
-        print("You have decided to halt the execution due to the mismatch between the IDs in two files.")
-        print("Please, review this troubleshooting guide, if you need an inspiration about how fixing this:")
+        printout("You have decided to halt the execution due to the mismatch between the IDs in two files.")
+        printout("Please, review this troubleshooting guide, if you need an inspiration about how fixing this:")
         print_error_files()
         exit(50)
 
@@ -428,8 +428,8 @@ def calculate_prs(plink_prefix: str, processed_wm_text_file: str, output_prefix:
         "--out", output_prefix,
     ], universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if process.returncode != 0 or not os.path.isfile(plink_output_file):
-        print("ERROR: plink has failed")
-        print(process.stderr)
+        printout("ERROR: plink has failed")
+        printout(process.stderr)
         exit(20)
 
     # Parsing plink results
