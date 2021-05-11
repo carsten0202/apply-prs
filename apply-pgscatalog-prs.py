@@ -461,7 +461,7 @@ def printout(text):
     console.print(layout)
 
 
-def render():
+def init_render_area():
     # Divide the "screen" in to three parts
     layout.split(
         Layout(name="header", size=3),
@@ -489,7 +489,7 @@ def main(args):
     # TODO: logging won't work above this line
     global LOGFILE
     LOGFILE = open(output_prefix + ".logging", 'w')
-    render()
+    init_render_area()
     maybe_load_config(args.config)
     pgscatalog_df, plink_variants_df, processed_wm_text_file = load_data(plink_prefix, prs_wm_text_file)
     # TODO: reuse
