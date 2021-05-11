@@ -235,6 +235,8 @@ def check_the_files_match(pgscatalog_df, plink_variants_df):
     amount_of_shared_keys = len(set(plink_variants_df[PLINK_KEY_COLUMN]).intersection(pgscatalog_df[PGSCATALOG_KEY_COLUMN]))
     amount_of_plink_variants = plink_variants_df.shape[0]
     amount_of_pgscatalog_variants = pgscatalog_df.shape[0]
+    # TODO: maybe (!) test whether the *strongest* SNPs are present in the genetic data
+    # TODO: to ensure that PRS won't lose it's power?
     if amount_of_shared_keys > 0.50 * amount_of_pgscatalog_variants:
         printout(f"{amount_of_shared_keys} ({amount_of_shared_keys / amount_of_pgscatalog_variants:.0%}) "
                  f"variants from PGSCatalog are available in your plink data ({amount_of_plink_variants} variants)")
