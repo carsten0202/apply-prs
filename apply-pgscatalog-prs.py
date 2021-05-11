@@ -3,6 +3,8 @@
 # diff /home/mvn373/fast/prs-repo/pre-calculated/scores/tool/olink000217-TARGETold.prs /home/mvn373/fast/prs-repo/pre-calculated/scores/tool/dev-test.prs
 # TODO: make support of ORs
 import argparse
+from io import TextIOWrapper
+import logging
 import time
 import os
 import shutil
@@ -38,6 +40,7 @@ console = Console()
 layout = Layout()
 live = Live(console=console)
 CONFIG: Union[None, dict] = None
+LOGFILE: Union[None, TextIOWrapper] = None
 
 
 PLINK_KEY_COLUMN = "rsid"
@@ -445,6 +448,10 @@ def calculate_prs(plink_prefix: str, processed_wm_text_file: str, output_prefix:
 
 
 def printout(text):
+    # Logging
+    if LOGFILE is not None:
+        LOGFILE.write(text+"\n")
+    # Printing to interactive console
     # noinspection PyUnresolvedReferences
     old_text = layout["main"].renderable.renderable
     old_lines = old_text.split("\n")
@@ -479,6 +486,9 @@ def render():
 def main(args):
     check_input(args)
     plink_prefix, prs_wm_text_file, output_prefix = args.genetic, args.prs_wm, args.out
+    # TODO: logging won't work above this line
+    global LOGFILE
+    LOGFILE = open(output_prefix + ".logging", 'w')
     render()
     maybe_load_config(args.config)
     pgscatalog_df, plink_variants_df, processed_wm_text_file = load_data(plink_prefix, prs_wm_text_file)
@@ -491,6 +501,7 @@ def main(args):
     preprocess_data(pgscatalog_df, plink_variants_df, processed_wm_text_file)
     final_check(pgscatalog_df, plink_variants_df)
     calculate_prs(plink_prefix, processed_wm_text_file, output_prefix)
+    LOGFILE.close()
 
 
 if __name__ == "__main__":
