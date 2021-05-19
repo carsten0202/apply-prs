@@ -259,6 +259,7 @@ def load_prs_wm(prs_wm_text_file: str):
     # Load, remove # part of the header
     df: pd.DataFrame = pd.read_table(
         prs_wm_text_file,
+        sep="\s+", engine="c",
         header=0,
         comment='#'  # to skip the PGSCatalog-specific header
     )
