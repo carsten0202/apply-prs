@@ -195,10 +195,14 @@ plink_variants_df: A dataframe of local plink variants data with columns:
 
 
 def prep_keys_rsid(pgscatalog_df: pd.DataFrame, plink_variants_df: pd.DataFrame):
-    # QC the plink rsid
-    if (plink_variants_df[PLINK_KEY_COLUMN].nunique() == 1) and (plink_variants_df[PLINK_KEY_COLUMN].unique()[0] == "."):
-        print_non_annotated_plink_file_error()
-        exit(30)
+    # QC the plink rsid. Are rsids even present, or all rsids are just dots (".")?
+    if plink_variants_df.head(30)[PLINK_KEY_COLUMN].nunique() > 1:
+        # ".head()" is an optimization so that we don't have to wait for .unique() / .nunique() to run on the full df
+        pass
+    else:
+        if (plink_variants_df[PLINK_KEY_COLUMN].nunique() == 1) and (plink_variants_df[PLINK_KEY_COLUMN].unique()[0] == "."):
+            print_non_annotated_plink_file_error()
+            exit(30)
     # Figuring out the key
     rsid_column = ask(
         "Which column in PRS file contains the [bold red]rsID[/bold red]?",
