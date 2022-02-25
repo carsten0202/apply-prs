@@ -95,7 +95,7 @@ def ask(text: str, _tool, _config: str, **kwargs):
 
 
 def print_error_files():
-    is_to_print_the_guide = ask("Would you like to see a troubleshoot guide?", default="n", _tool=Confirm)
+    is_to_print_the_guide = ask("Would you like to see a troubleshoot guide?", _config="n", default="n", _tool=Confirm)
     if is_to_print_the_guide:
         print("ERROR: 1A. Either the plink data don't use the conventional up-to-date rsID.")
         print("ERROR: 1B. Or the PGSCatalog data don't use the conventional up-to-date rsID.")
@@ -194,6 +194,24 @@ plink_variants_df: A dataframe of local plink variants data with columns:
 """
 
 
+def check_plink_exec():
+    # Check config for plink executable, else ask
+    global PLINK_EXEC
+    global PLINK_VERSION
+    default = ["./plink2"] + subprocess.run([
+        "which" , "plink", "plink2"
+    ], universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).stdout.rstrip().split("\n")
+    PLINK_EXEC = ask(
+        f"What path to the [bold red]plink executable[/bold red] should be used?",
+        default=default[-1] if default[-1] else "./plink2",
+        _config="plink executable",
+        _tool=Prompt,
+    )
+    PLINK_VERSION = int(subprocess.run([
+        PLINK_EXEC, "--version"
+    ], universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).stdout[7])
+
+
 def prep_keys_rsid(pgscatalog_df: pd.DataFrame, plink_variants_df: pd.DataFrame):
     # QC the plink rsid. Are rsids even present, or all rsids are just dots (".")?
     if plink_variants_df.head(30)[PLINK_KEY_COLUMN].nunique() > 1:
@@ -263,7 +281,7 @@ def load_prs_wm(prs_wm_text_file: str):
     # Load, remove # part of the header
     df: pd.DataFrame = pd.read_table(
         prs_wm_text_file,
-        sep="\s+", engine="c",
+        sep="\t", engine="c",
         header=0,
         comment='#'  # to skip the PGSCatalog-specific header
     )
@@ -411,8 +429,12 @@ def final_check(pgscatalog_df, plink_variants_df):
 
 
 def plink_qc(df: pd.DataFrame):
-    avg_snps_used = df["CNT2"].mean()
-    bad_samples = df.index[df["CNT2"] < 0.95 * avg_snps_used]
+    if PLINK_VERSION >= 2:
+        sum_column = "NAMED_ALLELE_DOSAGE_SUM"
+    else:
+        sum_column = "CNT2"
+    avg_snps_used = df[sum_column].mean()
+    bad_samples = df.index[df[sum_column] < 0.95 * avg_snps_used]
     if not bad_samples.empty:
         printout("WARNING: The following samples has a lot of missing SNPs "
                  "(more than 5% of SNPs, available on average in other samples)")
@@ -424,17 +446,17 @@ def plink_qc(df: pd.DataFrame):
 
 def calculate_prs(plink_prefix: str, processed_wm_text_file: str, output_prefix: str):
     # Variables
-    plink_output_file = output_prefix + ".profile"
-    prs_output_file = output_prefix + ".prs"
+    plink_output_file = output_prefix + ".sscore" if PLINK_VERSION >= 2 else output_prefix + ".profile"
+    prs_output_file = output_prefix + ".prs"    
 
     # Running plink
     printout("Running plink PRS scoring...")
     process = subprocess.run([
-        "plink", "--bfile", plink_prefix, "--score", processed_wm_text_file,
+        PLINK_EXEC, "--bfile", plink_prefix, "--score", processed_wm_text_file,
         "1",  # variant ID column index, 1-based
         "2",  # effect allele column index, 1-based
         "3",  # beta column index, 1-based
-        "sum", "header",
+        "header",
         "--out", output_prefix,
     ], universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if process.returncode != 0 or not os.path.isfile(plink_output_file):
@@ -446,9 +468,12 @@ def calculate_prs(plink_prefix: str, processed_wm_text_file: str, output_prefix:
     printout("Parsing plink results...")
     df = pd.read_table(plink_output_file, sep="\s+", index_col="IID")
     df: pd.DataFrame = plink_qc(df)
+    count_column = "ALLELE_CT" if PLINK_VERSION >= 2 else "CNT"
+    input_column = "SCORE1_AVG" if PLINK_VERSION >= 2 else "SCORE"
+    df[input_column] = df[input_column] * df[count_column]
     scorename = os.path.basename(processed_wm_text_file).split(".")[0]
     output_column = f"SCORESUM_{scorename}"
-    df.rename(columns={"SCORESUM": output_column}, inplace=True)
+    df.rename(columns={input_column: output_column}, inplace=True)
     df[[output_column]].to_csv(prs_output_file, sep="\t", float_format="%.4e")
     # Done
     printout(f"PRS is saved to {prs_output_file}")
@@ -477,10 +502,10 @@ def init_render_area():
         # Layout(name="cmd", size=3),
     )
     # Divide the "side" layout in to two
-    layout["top"].split(
+    layout["top"].split_column(
         Layout(name="leftfile", ratio=1),
         Layout(name="rightfile", ratio=1),
-        direction="horizontal",
+    #    direction="horizontal",
     )
 
     layout["header"].update(Panel("PRS Tool"))
@@ -498,6 +523,7 @@ def main(args):
     LOGFILE = open(output_prefix + ".logging", 'w')
     init_render_area()
     maybe_load_config(args.config)
+    check_plink_exec()
     pgscatalog_df, plink_variants_df, processed_wm_text_file = load_data(plink_prefix, prs_wm_text_file)
     # TODO: reuse
     # is_to_reuse = False
