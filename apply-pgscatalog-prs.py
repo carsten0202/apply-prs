@@ -23,9 +23,12 @@ from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
 parser = argparse.ArgumentParser()
-parser.add_argument("-g", "--genetic", default=None, type=str,
-                    help="Absolute path prefix to plink trio bed/bim/fam files "
+parser.add_argument("-g", "--bfile", "--genetic", default=None, type=str,
+                    help="Absolute path prefix to plink19 trio bed/bim/fam files "
                          "(for example, for the file '/emc/data/File.bed' this would be '/emc/data/File')")
+parser.add_argument("--pfile", default=None, type=str,
+                    help="Absolute path prefix to plink2 trio pgen/pvar/psam files "
+                         "(for example, for the file '/emc/data/File.pged' this would be '/emc/data/File')")
 parser.add_argument("-p", "--prs-wm", default=None, type=str,
                     help="Absolute path to PRS weight matrix downloaded from PGSCatalog")
 parser.add_argument("-o", "--out", default=None, type=str,
@@ -48,14 +51,24 @@ PGSCATALOG_KEY_COLUMN = "pos_key"
 
 
 def check_input(args):
-    if args.genetic is None:
-        print("plink genetic data are required")
-        parser.print_help()
-        exit(1)
-    for ext in ("bed", "bim", "fam"):
+    global PLINK_FILEFORMAT
+    if args.bfile is not None:
+        args.genetic = args.bfile
+        PLINK_FILEFORMAT = ("bed", "bim", "fam")
+    elif args.pfile is not None:
+        args.genetic = args.pfile
+        PLINK_FILEFORMAT = ("pgen", "pvar", "psam")
+    else:
+        print(f"plink genetic data are required. Please specify either a plink19 or plink2 dataset.")
+        exit(4)
+    for ext in PLINK_FILEFORMAT:
         if not os.path.isfile(f"{args.genetic}.{ext}"):
             print(f"plink genetic data are malformed - {args.genetic}.{ext} is missing")
             exit(4)
+    if not hasattr(args, 'genetic') or args.genetic is None:
+        print("plink genetic data are required")
+        parser.print_help()
+        exit(1)
     if args.prs_wm is None:
         print("PRS weight matrix is required")
         parser.print_help()
@@ -198,12 +211,12 @@ def check_plink_exec():
     # Check config for plink executable, else ask
     global PLINK_EXEC
     global PLINK_VERSION
-    default = ["./plink2"] + subprocess.run([
+    default = ["plink2"] + subprocess.run([
         "which" , "plink", "plink2"
     ], universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).stdout.rstrip().split("\n")
     PLINK_EXEC = ask(
         f"What path to the [bold red]plink executable[/bold red] should be used?",
-        default=default[-1] if default[-1] else "./plink2",
+        default=default[-1] if default[-1] else "plink2",
         _config="plink executable",
         _tool=Prompt,
     )
@@ -349,10 +362,17 @@ def load_data(plink_prefix: str, prs_wm_text_file: str):
     plink_variants_df = pd.read_table(
         plink_prefix+".bim",
         sep="\t", header=None,
-        # fixed structure of plink .bim files - https://www.cog-genomics.org/plink/1.9/formats#bim
+        # fixed structure of plink19 .bim files - https://www.cog-genomics.org/plink/1.9/formats#bim
         names=["chr_name", "rsid", "dummy_cm_position", "chr_position", "base_allele", "alternative_allele"],
         usecols=["chr_name", PLINK_KEY_COLUMN, "chr_position", "base_allele", "alternative_allele"],
+    ) if PLINK_FILEFORMAT[1] == "bim" else pd.read_table(
+        plink_prefix+".pvar",
+        sep="\t", header=None,
+        # fixed structure of plink2 .pvar files - https://www.cog-genomics.org/plink/2.0/formats#pvar
+        names=["chr_name", "chr_position", "rsid", "base_allele", "alternative_allele"],
+        usecols=["chr_name", "chr_position", PLINK_KEY_COLUMN, "base_allele", "alternative_allele"],
     )
+
     layout["top"]["rightfile"].update(render_file_table(plink_variants_df, title="plink data"))
     console.print(layout)
 
@@ -436,7 +456,7 @@ def plink_qc(df: pd.DataFrame):
     avg_snps_used = df[sum_column].mean()
     bad_samples = df.index[df[sum_column] < 0.95 * avg_snps_used]
     if not bad_samples.empty:
-        printout("WARNING: The following samples has a lot of missing SNPs "
+        printout("WARNING: The following samples have a lot of missing SNPs "
                  "(more than 5% of SNPs, available on average in other samples)")
         printout("They will dropped from the following analysis")
         printout(",".join(bad_samples))
@@ -451,8 +471,9 @@ def calculate_prs(plink_prefix: str, processed_wm_text_file: str, output_prefix:
 
     # Running plink
     printout("Running plink PRS scoring...")
+    format_arg = "--bfile" if PLINK_FILEFORMAT[0] == "bed" else "--pfile"
     process = subprocess.run([
-        PLINK_EXEC, "--bfile", plink_prefix, "--score", processed_wm_text_file,
+        PLINK_EXEC, format_arg, plink_prefix, "--score", processed_wm_text_file,
         "1",  # variant ID column index, 1-based
         "2",  # effect allele column index, 1-based
         "3",  # beta column index, 1-based
