@@ -28,7 +28,7 @@ parser.add_argument("-g", "--bfile", "--genetic", default=None, type=str,
                          "(for example, for the file '/emc/data/File.bed' this would be '/emc/data/File')")
 parser.add_argument("--pfile", default=None, type=str,
                     help="Absolute path prefix to plink2 trio pgen/pvar/psam files "
-                         "(for example, for the file '/emc/data/File.pged' this would be '/emc/data/File')")
+                         "(for example, for the file '/emc/data/File.pgen' this would be '/emc/data/File')")
 parser.add_argument("-p", "--prs-wm", default=None, type=str,
                     help="Absolute path to PRS weight matrix downloaded from PGSCatalog")
 parser.add_argument("-o", "--out", default=None, type=str,
