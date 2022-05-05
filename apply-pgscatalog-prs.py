@@ -487,7 +487,8 @@ def calculate_prs(plink_prefix: str, processed_wm_text_file: str, output_prefix:
 
     # Parsing plink results
     printout("Parsing plink results...")
-    df = pd.read_table(plink_output_file, sep="\s+", index_col="IID")
+    try: df = pd.read_table(plink_output_file, sep="\s+", index_col="IID")
+    except ValueError: df = pd.read_table(plink_output_file, sep="\s+", index_col="#IID")
     df: pd.DataFrame = plink_qc(df)
     count_column = "ALLELE_CT" if PLINK_VERSION >= 2 else "CNT"
     input_column = "SCORE1_AVG" if PLINK_VERSION >= 2 else "SCORE"
